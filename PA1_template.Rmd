@@ -1,25 +1,116 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+Load libraries
+```{r libraries, echo = TRUE}
+library(plyr)
+```
+
+Code to Read the data
+```{r reading data, echo = TRUE}
 
 
-## Loading and preprocessing the data
+activity <- read.csv("activity.csv", stringsAsFactors = FALSE)
+```
 
+Code that formats the data into an analyzable table
+```{r format data, echo = TRUE}
+activity$date <- as.factor(activity$date)
 
+#create a new set that has dates formated into a date object
+activity_d <- activity
+activity_d$date <- strptime(activity$date, format = "%Y-%m-%d")
+```
 
-## What is mean total number of steps taken per day?
+Total Steps taken per day
+```{r total steps, echo = TRUE}
+step_sum <- aggregate(activity$steps, by = list(activity$date), sum, na.rm = TRUE)
+hist(as.vector(rep(strptime(step_sum$Group.1, format = "%Y-%m-%d"), step_sum$x)), 
+     breaks = strptime(step_sum$Group.1, format = "%Y-%m-%d"), 
+     freq = TRUE, 
+     xlab = "Date", 
+     ylab = "Total Number of Steps", 
+     main = "Total Steps Taken per Day")
+```
 
+Mean and median of total number of steps taken per day
+```{r mean and median, echo = TRUE}
+activity_rm <- activity[is.na(activity$steps) == FALSE, ]
+activity_sums <- aggregate(activity_rm$steps, by = list(activity_rm$date), sum)
+summary(activity_sums$x)
+```
 
+Time series of Number of steps taken in each interval. Each interval is the average of all days in that interval.
+```{r time series, echo = TRUE}
+time_series <- aggregate(activity$steps, by = list(activity$interval), mean, na.rm = TRUE)
+plot(time_series,
+     type = "l",
+     xlab = "Time (min)",
+     ylab = "Average steps taken")
+```
 
-## What is the average daily activity pattern?
+Interval that contains the maximum number of steps
+```{r max steps, echo = TRUE}
+time_series[which.max(time_series$x), ]
+```
 
+Percentage of NA's
+```{r percent NAs, echo = TRUE}
+sum(is.na(activity$steps))/nrow(activity)
+```
 
+Use mean imputation to impute missing values
+```{r impute, echo = TRUE}
+activity_noNA <- activity[is.na(activity$steps) == FALSE, ]
+activity_NA <- activity[is.na(activity$steps) == TRUE, ]
+names(time_series) <- c("interval", "x")
+imputed <- join(time_series, activity_NA, by = 'interval', type = 'right', match = 'all')
+imputed <- data.frame(cbind(imputed$x, as.character(imputed$date), imputed$interval))
+names(imputed) <- names(activity_NA)
+activity_imputed <- data.frame(rbind(activity_noNA, imputed))
+activity_imputed$steps <- as.numeric(activity_imputed$steps)
+```
 
-## Imputing missing values
+Total Steps taken per day using imputed data
+```{r total steps imputed, echo = TRUE}
+step_sum2 <- aggregate(activity_imputed$steps, by = list(activity_imputed$date), sum, na.rm = TRUE)
+hist(as.vector(rep(strptime(step_sum2$Group.1, format = "%Y-%m-%d"), step_sum2$x)), 
+     breaks = strptime(step_sum2$Group.1, format = "%Y-%m-%d"), 
+     freq = TRUE, 
+     xlab = "Date", 
+     ylab = "Total Number of Steps", 
+     main = "Total Steps Taken per Day with Mean Imputation")
+```
 
+Mean and median of total number of steps taken per day using imputed data
+```{r mean and median imputed, echo = TRUE}
+activity_sums2 <- aggregate(activity_imputed$steps, by = list(activity_imputed$date), sum)
+summary(activity_sums2$x)
+```
 
+Make a new column indicating whether the day is a weekday or weekend
+```{r day types, echo = TRUE}
+day_type <- character()
+activity_imputed$date <- strptime(activity_imputed$date, format = "%Y-%m-%d")
+date_vector <- activity_imputed$date
+nrows <- nrow(activity_imputed)
+for (i in 1:17568) {
+  if (weekdays(date_vector)[i] %in% c("Saturday", "Sunday")) {
+    day_type[i] <- "weekend"
+  } else {
+    day_type[i] <- "weekday"
+  } 
+}
+activity_imputed$day_type <- day_type
+activity_imputed$day_type <- as.factor(activity_imputed$day_type)
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+Panel plot for weekday vs weekends
+```{r weekday vs weekends, echo = TRUE}
+activity_imputed$steps <- as.numeric(activity_imputed$steps)
+activity_imputed$interval <- as.numeric(activity_imputed$interval)
+par(mfrow = c(2:1))
+weekdays <- subset(activity_imputed, activity_imputed$day_type == "weekday")
+weekends <- subset(activity_imputed, activity_imputed$day_type == "weekend")
+weekdays_agg <- aggregate(weekdays$steps, by = list(weekdays$interval), mean)
+weekends_agg <- aggregate(weekends$steps, by = list(weekends$interval), mean)
+plot(weekdays_agg, main = "Weekdays", type = "l", xlab = "Interval", ylab = "Number of steps")
+plot(weekends_agg, main = "Weekends", type = "l", xlab = "Interval", ylab = "Number of steps")
+```
